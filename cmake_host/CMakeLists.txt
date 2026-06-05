@@ -266,9 +266,23 @@ set(AAPT2_PROTO_DIR ${SRC}/base/tools/aapt2)
 
 file(GLOB_RECURSE PROTO_FILES ${AAPT2_PROTO_DIR}/*.proto)
 
-find_package(Protobuf)
+# 优先使用用户传入的 protoc 路径；未传入时尝试 find_package
+if(NOT Protobuf_PROTOC_EXECUTABLE)
+    find_package(Protobuf)
+endif()
 
-if(NOT EXISTS ${Protobuf_PROTOC_EXECUTABLE})
+if(NOT Protobuf_PROTOC_EXECUTABLE)
+    message(FATAL_ERROR "protoc not found. Set -DProtobuf_PROTOC_EXECUTABLE=<path>")
+endif()
+
+# Windows 上需要处理 .exe 后缀
+if(WIN32 AND NOT EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
+    if(EXISTS "${Protobuf_PROTOC_EXECUTABLE}.exe")
+        set(Protobuf_PROTOC_EXECUTABLE "${Protobuf_PROTOC_EXECUTABLE}.exe")
+    endif()
+endif()
+
+if(NOT EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
     message(FATAL_ERROR "Invalid protoc: ${Protobuf_PROTOC_EXECUTABLE}")
 endif()
 
