@@ -1,0 +1,37 @@
+diff --git a/incfs/util/include/util/map_ptr.h b/incfs/util/include/util/map_ptr.h
+index 9a6aebf..c2222a1 100644
+--- a/incfs/util/include/util/map_ptr.h
++++ b/incfs/util/include/util/map_ptr.h
+@@ -192,6 +192,32 @@ public:
+             return temp;
+         }
+ 
++        const const_iterator& operator--() {
++            safe_ptr_ = safe_ptr_ + (-1);
++            return *this;
++        }
++
++        const const_iterator operator--(int) {
++            const_iterator temp(*this);
++            safe_ptr_ = safe_ptr_ + (-1);
++            return temp;
++        }
++
++        const_iterator& operator-=(int n) {
++            safe_ptr_ = safe_ptr_ + (-n);
++            return *this;
++        }
++
++        const_iterator operator-(int n) const {
++            const_iterator other = *this;
++            other -= n;
++            return other;
++        }
++
++        bool operator<(const const_iterator& other) const {
++            return (safe_ptr_ - other.safe_ptr_) < 0;
++        }
++
+     private:
+         explicit const_iterator(const map_ptr<T>& ptr) : safe_ptr_(ptr) {}
+         map_ptr<T> safe_ptr_;

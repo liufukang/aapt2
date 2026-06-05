@@ -24,4 +24,7 @@ git apply "patches/protobuf.patch"
 # Fix BusError when executing a 32b binary on a armv8 with compatibility mode
 git apply "patches/32bsystem_on_armv8.patch"
 
+# Fix map_ptr const_iterator missing operator-- for libstdc++
+git -C "submodules/incremental_delivery" apply "../../patches/map_ptr_iterator.patch"
+
 ln -sf "submodules/googletest" "submodules/boringssl/src/third_party/googletest"
