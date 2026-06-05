@@ -21,19 +21,11 @@ jobs:
             name: Linux (x86_64)
             artifact: aapt2-linux-x86_64
             build_args: ""
-          - os: windows-latest
-            name: Windows (x86_64)
-            artifact: aapt2-windows-x86_64
-            build_args: ""
 
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Disable autocrlf (Windows)
-        if: runner.os == 'Windows'
-        run: git config --global core.autocrlf false
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -52,34 +44,19 @@ jobs:
           curl -sLO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-osx-aarch_64.zip
           sudo unzip -j protoc-*.zip bin/protoc -d /usr/local/bin/
 
-      - name: Install protoc (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-win64.zip" -OutFile protoc.zip
-          Expand-Archive protoc.zip -DestinationPath protoc
-          echo "${{ github.workspace }}\protoc\bin" >> $env:GITHUB_PATH
-          echo "PROTOC_EXE=${{ github.workspace }}/protoc/bin/protoc.exe" >> $env:GITHUB_ENV
-
       # ---- 构建依赖 ----
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build zlib1g-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build zlib1g-dev clang
 
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
         run: brew install cmake ninja
 
-      - name: Install build tools (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install ninja cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-          vcpkg install zlib:x64-mingw-static
-          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
-          echo "VCPKG_TARGET_TRIPLET=x64-mingw-static" >> $env:GITHUB_ENV
-
       # ---- 打补丁 ----
-      - name: Apply patches (Unix)
-        if: runner.os != 'Windows'
+      - name: Apply patches
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then
             ./patch_local.sh
@@ -87,77 +64,31 @@ jobs:
             ./patch.sh
           fi
 
-      - name: Apply patches (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          mkdir -p "submodules/incremental_delivery/sysprop/include/"
-          cp "misc/IncrementalProperties.sysprop.h" "submodules/incremental_delivery/sysprop/include/"
-          cp "misc/IncrementalProperties.sysprop.cpp" "submodules/incremental_delivery/sysprop/"
-          cp "misc/platform_tools_version.h" "submodules/soong/cc/libbuildversion/include"
-
-          sed -i "s#frameworks/base/tools/aapt2/Configuration.proto#Configuration.proto#g" \
-            "submodules/base/tools/aapt2/Resources.proto" \
-            "submodules/base/tools/aapt2/ResourcesInternal.proto"
-          sed -i "s#frameworks/base/tools/aapt2/Resources.proto#Resources.proto#g" \
-            "submodules/base/tools/aapt2/ApkInfo.proto" \
-            "submodules/base/tools/aapt2/ResourcesInternal.proto"
-
-          git apply "patches/apktool_ibotpeaches.patch"
-          git apply "patches/protobuf.patch"
-          git apply "patches/32bsystem_on_armv8.patch"
-
-          cp -r "submodules/googletest" "submodules/boringssl/src/third_party/googletest"
-
       # ---- 构建版本号 ----
       - name: Set build number
-        shell: bash
         run: echo "AAPT2_BUILD_NUMBER=$(date +%Y%m%d)01" >> $GITHUB_ENV
 
       # ---- 编译 ----
-      - name: Build (Unix)
-        if: runner.os != 'Windows'
+      - name: Build
         run: |
-          PROTOC_PATH=$(which protoc) AAPT2_BUILD_NUMBER=${{ env.AAPT2_BUILD_NUMBER }} \
-            ./build_host.sh ${{ matrix.build_args }}
-
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          cp CMakeLists.txt CMakeLists.txt.bak
-          cp CMakeLists_host.txt CMakeLists.txt
-
-          cmake -GNinja \
-            -B build-host \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
-            -DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET" \
-            -DProtobuf_PROTOC_EXECUTABLE="$PROTOC_EXE"
-
-          ninja -C build-host aapt2
-
-          mv CMakeLists.txt.bak CMakeLists.txt
-          mkdir -p build/bin
-          cp build-host/bin/aapt2.exe build/bin/
+          export PROTOC_PATH=$(which protoc)
+          export AAPT2_BUILD_NUMBER=${{ env.AAPT2_BUILD_NUMBER }}
+          # Linux 使用 Clang 编译，与 AOSP 代码兼容
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            export CC=clang
+            export CXX=clang++
+          fi
+          ./build_host.sh ${{ matrix.build_args }}
 
       # ---- 验证 ----
       - name: Verify
-        shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            file build/bin/aapt2.exe
-            ./build/bin/aapt2.exe version || true
-          else
-            file build/bin/aapt2
-            ./build/bin/aapt2 version
-          fi
+          file build/bin/aapt2
+          ./build/bin/aapt2 version
 
       # ---- 上传产物 ----
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: |
-            build/bin/aapt2
-            build/bin/aapt2.exe
+          path: build/bin/aapt2
