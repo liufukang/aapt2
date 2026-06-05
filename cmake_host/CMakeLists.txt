@@ -102,7 +102,7 @@ target_include_directories(libcutils PRIVATE
     )
 
 # ========================= libutils (精简，去掉 Looper) ============================
-add_library(libutils STATIC
+set(LIBUTILS_SOURCES
     ${SRC}/core/libutils/FileMap.cpp
     ${SRC}/core/libutils/JenkinsHash.cpp
     ${SRC}/core/libutils/LightRefBase.cpp
@@ -114,7 +114,6 @@ add_library(libutils STATIC
     ${SRC}/core/libutils/Timers.cpp
     ${SRC}/core/libutils/Tokenizer.cpp
     ${SRC}/core/libutils/misc.cpp
-    ${SRC}/core/libutils/Trace.cpp
     ${SRC}/core/libutils/binder/Errors.cpp
     ${SRC}/core/libutils/binder/RefBase.cpp
     ${SRC}/core/libutils/binder/SharedBuffer.cpp
@@ -124,9 +123,15 @@ add_library(libutils STATIC
     ${SRC}/core/libutils/binder/Unicode.cpp
     ${SRC}/core/libutils/binder/VectorImpl.cpp
     )
+if(NOT WIN32)
+    # Trace.cpp 依赖 cutils/trace.h（含 unistd.h / stdatomic.h），Windows 不可用
+    list(APPEND LIBUTILS_SOURCES ${SRC}/core/libutils/Trace.cpp)
+endif()
+add_library(libutils STATIC ${LIBUTILS_SOURCES})
 target_include_directories(libutils PRIVATE
     ${SRC}/core/include
     ${SRC}/core/libutils/include
+    ${SRC}/core/libcutils/include
     ${SRC}/core/libvndksupport/include
     ${SRC}/logging/liblog/include
     ${SRC}/libbase/include
