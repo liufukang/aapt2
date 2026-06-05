@@ -40,6 +40,7 @@ using std::atomic_compare_exchange_strong_explicit;
 #include <cstring>
 #include <cstdlib>
 #include <limits>
+#include <memory>
 #endif
 
 // 4. Windows (MinGW) 缺少 POSIX localtime_r
