@@ -35,7 +35,13 @@ using std::atomic_fetch_or_explicit;
 using std::atomic_compare_exchange_strong_explicit;
 #endif
 
-// 3. Windows (MinGW) 缺少 POSIX localtime_r
+// 3. AOSP 源码部分文件依赖隐式 include，GCC 更严格
+#if defined(__cplusplus)
+#include <cstring>
+#include <cstdlib>
+#endif
+
+// 4. Windows (MinGW) 缺少 POSIX localtime_r
 #if defined(_WIN32) && !defined(localtime_r)
 #include <time.h>
 static inline struct tm* localtime_r(const time_t* timep, struct tm* result) {

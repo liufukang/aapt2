@@ -43,8 +43,6 @@ if(WIN32)
         -DUSE_MINGW
         -D_WIN32_WINNT=0x0601
         -DNOMINMAX
-        -DUNICODE
-        -D_UNICODE
     )
 endif()
 
