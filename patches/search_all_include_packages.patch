@@ -1,0 +1,205 @@
+From 583a9551e3fb05eede68c2be777f7fc80a9f057e Mon Sep 17 00:00:00 2001
+From: "liufukang.11" <liufukang.11@jd.com>
+Date: Fri, 5 Jun 2026 23:20:24 +0800
+Subject: [PATCH] add --search-all-include-packages support
+
+---
+ tools/aapt2/Main.cpp                         |  1 +
+ tools/aapt2/cmd/Link.cpp                     | 11 +++++++++
+ tools/aapt2/cmd/Link.h                       |  7 ++++++
+ tools/aapt2/link/ReferenceLinker.cpp         | 16 +++++++++++++
+ tools/aapt2/process/IResourceTableConsumer.h |  1 +
+ tools/aapt2/process/SymbolTable.cpp          | 21 ++++++++++++++++
+ tools/aapt2/process/SymbolTable.h            | 25 ++++++++++++++++++++
+ 7 files changed, 82 insertions(+)
+
+diff --git a/submodules/base/tools/aapt2/Main.cpp b/submodules/base/tools/aapt2/Main.cpp
+index b351d6ee4f33..45b185fbb88f 100644
+--- a/submodules/base/tools/aapt2/Main.cpp
++++ b/submodules/base/tools/aapt2/Main.cpp
+@@ -57,6 +57,7 @@ class VersionCommand : public Command {
+   int Action(const std::vector<std::string>& /* args */) override {
+     std::cerr << StringPrintf("%s %s", util::GetToolName(), util::GetToolFingerprint().c_str())
+               << std::endl;
++    std::cerr << "  [+] add --search-all-include-packages flag support" << std::endl;
+     return 0;
+   }
+ };
+diff --git a/submodules/base/tools/aapt2/cmd/Link.cpp b/submodules/base/tools/aapt2/cmd/Link.cpp
+index f1348ce71458..7d461a4dd386 100644
+--- a/submodules/base/tools/aapt2/cmd/Link.cpp
++++ b/submodules/base/tools/aapt2/cmd/Link.cpp
+@@ -897,6 +897,7 @@ class Linker {
+ 
+     // Capture the shared libraries so that the final resource table can be properly flattened
+     // with support for shared libraries.
++    std::vector<std::string> include_pkg_names;
+     for (auto& entry : asset_source->GetAssignedPackageIds()) {
+       if (entry.first == kAppPackageId) {
+         // Capture the included base feature package.
+@@ -915,6 +916,16 @@ class Linker {
+       } else if (asset_source->IsPackageDynamic(entry.first, entry.second)) {
+         final_table_.included_packages_[entry.first] = entry.second;
+       }
++      // 收集非 android 包名，用于 --search-all-include-packages 回退搜索
++      if (entry.second != "android") {
++        include_pkg_names.push_back(entry.second);
++      }
++    }
++
++    // 设置 include 包名到 SymbolTable，供 ReferenceLinker 回退搜索使用
++    if (options_.search_all_include_packages) {
++      context_->GetExternalSymbols()->SetSearchAllIncludePackages(true);
++      context_->GetExternalSymbols()->SetIncludePackageNames(std::move(include_pkg_names));
+     }
+ 
+     context_->GetExternalSymbols()->AppendSource(std::move(asset_source));
+diff --git a/submodules/base/tools/aapt2/cmd/Link.h b/submodules/base/tools/aapt2/cmd/Link.h
+index 7d3111d5e712..29560bfc570c 100644
+--- a/submodules/base/tools/aapt2/cmd/Link.h
++++ b/submodules/base/tools/aapt2/cmd/Link.h
+@@ -116,6 +116,9 @@ struct LinkOptions {
+ 
+   // Whether we should fail on definitions of a resource with conflicting visibility.
+   bool strict_visibility = false;
++
++  // 非限定引用解析失败时，搜索所有 -I include 包（android 包除外）
++  bool search_all_include_packages = false;
+ };
+ 
+ class LinkCommand : public Command {
+@@ -344,6 +347,10 @@ class LinkCommand : public Command {
+                       "updatableSystem=\"false\" to the root manifest node, overwriting any\n"
+                       "existing attribute. This is ignored if the manifest has a versionCode.",
+                       &options_.manifest_fixer_options.non_updatable_system);
++    AddOptionalSwitch("--search-all-include-packages",
++                      "When resolving non-qualified resource references, search all -I\n"
++                      "include packages as fallback (excluding android framework).",
++                      &options_.search_all_include_packages);
+   }
+ 
+   int Action(const std::vector<std::string>& args) override;
+diff --git a/submodules/base/tools/aapt2/link/ReferenceLinker.cpp b/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
+index c76626254df8..14f774de9f09 100644
+--- a/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
++++ b/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
+@@ -277,6 +277,22 @@ const SymbolTable::Symbol* ReferenceLinker::ResolveSymbol(const Reference& refer
+           }
+         }
+       }
++
++      // 搜索所有 -I include 包作为回退（跳过 callsite 自身包）
++      // 使用 FindByNameNoMangle 避免 NameMangler 将包名 mangle 成错误的形式
++      if (symbols->GetSearchAllIncludePackages()) {
++        const auto& pkg_names = symbols->GetIncludePackageNames();
++        for (const std::string& pkg : pkg_names) {
++          if (pkg == callsite.package) {
++            continue;
++          }
++          symbol = symbols->FindByNameNoMangle(ResourceName(pkg, name.type, name.entry));
++          if (symbol) {
++            return symbol;
++          }
++        }
++      }
++
+       return nullptr;
+     }
+     return symbols->FindByName(name);
+diff --git a/submodules/base/tools/aapt2/process/IResourceTableConsumer.h b/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
+index e41e45a29b3e..fc8d7e9dd97a 100644
+--- a/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
++++ b/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
+@@ -21,6 +21,7 @@
+ #include <list>
+ #include <set>
+ #include <sstream>
++#include <vector>
+ 
+ #include "NameMangler.h"
+ #include "Resource.h"
+diff --git a/submodules/base/tools/aapt2/process/SymbolTable.cpp b/submodules/base/tools/aapt2/process/SymbolTable.cpp
+index d78baf9ffeb4..8421b85ef152 100644
+--- a/submodules/base/tools/aapt2/process/SymbolTable.cpp
++++ b/submodules/base/tools/aapt2/process/SymbolTable.cpp
+@@ -119,6 +119,27 @@ const SymbolTable::Symbol* SymbolTable::FindByName(const ResourceName& name) {
+   return shared_symbol.get();
+ }
+ 
++const SymbolTable::Symbol* SymbolTable::FindByNameNoMangle(const ResourceName& name) {
++  // 直接用原始名称查找，跳过 mangling
++  if (const std::shared_ptr<Symbol>& s = cache_.get(name)) {
++    return s.get();
++  }
++
++  std::unique_ptr<Symbol> symbol = delegate_->FindByName(name, sources_);
++  if (symbol == nullptr) {
++    return nullptr;
++  }
++
++  std::shared_ptr<Symbol> shared_symbol(std::move(symbol));
++  cache_.put(name, shared_symbol);
++
++  if (shared_symbol->id) {
++    id_cache_.put(shared_symbol->id.value(), shared_symbol);
++  }
++
++  return shared_symbol.get();
++}
++
+ const SymbolTable::Symbol* SymbolTable::FindById(const ResourceId& id) {
+   if (const std::shared_ptr<Symbol>& s = id_cache_.get(id)) {
+     return s.get();
+diff --git a/submodules/base/tools/aapt2/process/SymbolTable.h b/submodules/base/tools/aapt2/process/SymbolTable.h
+index 36eb0bab6046..06f1b620bff0 100644
+--- a/submodules/base/tools/aapt2/process/SymbolTable.h
++++ b/submodules/base/tools/aapt2/process/SymbolTable.h
+@@ -90,6 +90,9 @@ class SymbolTable {
+   // results are stored in a cache which may evict entries on subsequent calls.
+   const Symbol* FindByName(const ResourceName& name);
+ 
++  // 跳过 name mangling 直接搜索，用于跨包非限定资源引用的回退查找
++  const Symbol* FindByNameNoMangle(const ResourceName& name);
++
+   // NOTE: Never hold on to the result between calls to FindByXXX. The
+   // results are stored in a cache which may evict entries on subsequent calls.
+   const Symbol* FindById(const ResourceId& id);
+@@ -100,6 +103,24 @@ class SymbolTable {
+   // results are stored in a cache which may evict entries on subsequent calls.
+   const Symbol* FindByReference(const Reference& ref);
+ 
++  // 设置是否在非限定引用查找失败时搜索所有 include 包
++  void SetSearchAllIncludePackages(bool val) {
++    search_all_include_packages_ = val;
++  }
++
++  bool GetSearchAllIncludePackages() const {
++    return search_all_include_packages_;
++  }
++
++  // 设置所有 -I 加载的 include 包名（不含 "android"）
++  void SetIncludePackageNames(std::vector<std::string> names) {
++    include_package_names_ = std::move(names);
++  }
++
++  const std::vector<std::string>& GetIncludePackageNames() const {
++    return include_package_names_;
++  }
++
+  private:
+   NameMangler* mangler_;
+   std::unique_ptr<ISymbolTableDelegate> delegate_;
+@@ -110,6 +131,10 @@ class SymbolTable {
+   android::LruCache<ResourceName, std::shared_ptr<Symbol>> cache_;
+   android::LruCache<ResourceId, std::shared_ptr<Symbol>> id_cache_;
+ 
++  // 跨包非限定资源引用回退搜索配置
++  bool search_all_include_packages_ = false;
++  std::vector<std::string> include_package_names_;
++
+   DISALLOW_COPY_AND_ASSIGN(SymbolTable);
+ };
+ 
+-- 
+2.33.0
+

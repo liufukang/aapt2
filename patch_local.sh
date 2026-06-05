@@ -33,6 +33,9 @@ git apply "patches/apktool_ibotpeaches.patch" || echo "WARNING: apktool_ibotpeac
 git apply "patches/protobuf.patch" || echo "WARNING: protobuf.patch failed (may already be applied)"
 git apply "patches/32bsystem_on_armv8.patch" || echo "WARNING: 32bsystem_on_armv8.patch failed (may already be applied)"
 
+# 添加 --search-all-include-packages 标志，支持跨 bundle 非限定资源引用
+git apply "patches/search_all_include_packages.patch" || echo "WARNING: search_all_include_packages.patch failed (may already be applied)"
+
 # map_ptr const_iterator 缺少 operator-- 导致 libstdc++ 编译失败
 git -C "submodules/incremental_delivery" apply "../../patches/map_ptr_iterator.patch" || echo "WARNING: map_ptr_iterator.patch failed (may already be applied)"
 

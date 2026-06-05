@@ -21,6 +21,9 @@ sed -i "$ressourcesPattern" "submodules/base/tools/aapt2/ResourcesInternal.proto
 git apply "patches/apktool_ibotpeaches.patch"
 git apply "patches/protobuf.patch"
 
+# Add --search-all-include-packages flag for cross-bundle resource references
+git apply "patches/search_all_include_packages.patch"
+
 # Fix BusError when executing a 32b binary on a armv8 with compatibility mode
 git apply "patches/32bsystem_on_armv8.patch"
 

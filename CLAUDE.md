@@ -49,6 +49,68 @@ cmake/lib*.cmake        # 各 AOSP 依赖库的编译定义
 
 新增补丁放在 `patches/` 目录，在 `patch.sh` 中添加 `git apply` 语句。
 
+### 生成新 patch 的安全流程（临时 commit 两层差异法）
+
+由于多个 patch 有顺序依赖（如 `search_all_include_packages.patch` 必须在 `apktool_ibotpeaches.patch` 之后应用），手动编写 patch 容易出错。推荐使用 git 临时 commit 生成：
+
+```bash
+# 1. 确保 submodule 在干净状态
+cd submodules/base && git checkout -- . && git checkout -b temp-patch
+
+# 2. 第一层：apply 所有前置 patch 并 commit（作为基线）
+cd ../../
+git apply patches/apktool_ibotpeaches.patch
+cd submodules/base && git add -A && git commit -m "baseline (apktool)" --no-verify
+
+# 3. 第二层：在基线上做你的改动
+# ... 编辑文件、编译验证 ...
+git add <files> && git commit -m "my feature description" --no-verify
+
+# 4. 导出第二层 commit 为 patch，sed 修正路径前缀
+#    （submodule 内路径是 tools/aapt2/...，patch 需要 submodules/base/tools/aapt2/...）
+git format-patch -1 HEAD --stdout \
+  | sed 's|a/tools/aapt2/|a/submodules/base/tools/aapt2/|g;s|b/tools/aapt2/|b/submodules/base/tools/aapt2/|g' \
+  > ../../patches/my_feature.patch
+
+# 5. 验证：从干净状态依次 apply 所有 patch
+cd ../../submodules/base && git checkout -- .
+cd ../../
+git apply patches/apktool_ibotpeaches.patch
+git apply patches/my_feature.patch  # 应该无冲突无报错
+
+# 6. 清理临时分支
+cd submodules/base
+git checkout --detach <原始commit-hash>  # 可用 git log 查看
+git branch -D temp-patch
+```
+
+**要点**：
+- 不手动编写 patch，完全由 `git format-patch` 生成，杜绝路径/行号错误
+- 基于真实前置 patch 后的基线，保证新 patch 不与已有 patch 冲突
+- 第二层 commit 前可先 `cmake --build` 确认编译通过
+- 如果修改涉及 `submodules/base` 以外的文件（如 protobuf），需用 `-C` 指定子目录或调整 sed 规则
+
+## Host 编译（macOS/Linux 本机 aapt2）
+
+用于生成本机架构的 aapt2 可执行文件（供 Gradle 插件通过 `android.aapt2FromMavenOverride` 使用）：
+
+```bash
+# 打补丁 + 编译（首次或 submodule 代码变更后）
+./patch_local.sh
+./build_host.sh
+
+# 产物位于 build/bin/aapt2
+./build/bin/aapt2 version
+```
+
+`build_host.sh` 会自动检测当前架构（arm64/x86_64），使用 `CMakeLists_host.txt` 配置 cmake，编译静态链接的 aapt2。依赖 `protoc 21.12`（通过 `PROTOC_PATH` 环境变量指定，默认 `/tmp/protoc-21.12/bin/protoc`）。
+
+macOS 编译 universal binary（同时支持 arm64 + x86_64）：
+
+```bash
+./build_host.sh universal
+```
+
 ## macOS 本地编译
 
 原始 `patch.sh` 和 `build.sh` 仅适配 Linux，macOS 上有两个兼容性问题：
