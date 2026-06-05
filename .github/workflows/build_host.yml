@@ -21,11 +21,35 @@ jobs:
             name: Linux (x86_64)
             artifact: aapt2-linux-x86_64
             build_args: ""
+          - os: windows-latest
+            name: Windows (x86_64)
+            artifact: aapt2-windows-x86_64
+            build_args: ""
 
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
+    # Windows 使用 MSYS2 的 bash
+    defaults:
+      run:
+        shell: ${{ matrix.os == 'windows-latest' && 'msys2 {0}' || 'bash' }}
+
     steps:
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+          install: >-
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-zlib
+            unzip
+            git
+            patch
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -43,6 +67,12 @@ jobs:
         run: |
           curl -sLO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-osx-aarch_64.zip
           sudo unzip -j protoc-*.zip bin/protoc -d /usr/local/bin/
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -sLO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-win64.zip
+          unzip -j protoc-21.12-win64.zip bin/protoc.exe -d /clang64/bin/
 
       # ---- 构建依赖 ----
       - name: Install build tools (Linux)
@@ -83,12 +113,12 @@ jobs:
       # ---- 验证 ----
       - name: Verify
         run: |
-          file build/bin/aapt2
-          ./build/bin/aapt2 version
+          file build/bin/aapt2*
+          ./build/bin/aapt2* version
 
       # ---- 上传产物 ----
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: build/bin/aapt2
+          path: build/bin/aapt2*
