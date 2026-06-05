@@ -85,13 +85,18 @@ jobs:
         run: npm install
 
       - name: Import GPG key
+        if: env.GPG_KEY != ''
         uses: crazy-max/ghaction-import-gpg@v6
+        env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
           fingerprint: ${{ vars.GPG_FINGERPRINT }}
 
       - name: Release
+        if: env.GPG_KEY != ''
         env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm exec semantic-release
