@@ -48,12 +48,65 @@ using std::atomic_compare_exchange_strong_explicit;
 #include <memory>
 #endif
 
-// 4. Windows (MinGW) 缺少 POSIX localtime_r
+// 4. Windows (MinGW/CLANG64) 缺少 POSIX localtime_r
 #if defined(_WIN32) && !defined(localtime_r)
 #include <time.h>
 static inline struct tm* localtime_r(const time_t* timep, struct tm* result) {
     localtime_s(result, timep);
     return result;
+}
+#endif
+
+// 5. Windows 缺少 POSIX strptime，提供简化实现
+#if defined(_WIN32) && !defined(strptime)
+#include <time.h>
+#include <ctype.h>
+#include <string.h>
+static inline char* strptime(const char* s, const char* format, struct tm* tm) {
+    // 简化实现：支持 %Y %m %d %H %M %S 等基本格式
+    const char* sp = s;
+    const char* fp = format;
+    while (*fp && *sp) {
+        if (*fp == '%') {
+            fp++;
+            switch (*fp) {
+                case 'Y':
+                    tm->tm_year = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_year = tm->tm_year * 10 + (*sp++ - '0'); }
+                    tm->tm_year -= 1900;
+                    break;
+                case 'm':
+                    tm->tm_mon = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_mon = tm->tm_mon * 10 + (*sp++ - '0'); }
+                    tm->tm_mon -= 1;
+                    break;
+                case 'd':
+                    tm->tm_mday = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_mday = tm->tm_mday * 10 + (*sp++ - '0'); }
+                    break;
+                case 'H':
+                    tm->tm_hour = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_hour = tm->tm_hour * 10 + (*sp++ - '0'); }
+                    break;
+                case 'M':
+                    tm->tm_min = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_min = tm->tm_min * 10 + (*sp++ - '0'); }
+                    break;
+                case 'S':
+                    tm->tm_sec = 0;
+                    while (isdigit((unsigned char)*sp)) { tm->tm_sec = tm->tm_sec * 10 + (*sp++ - '0'); }
+                    break;
+                default:
+                    if (*sp == *fp) sp++;
+                    break;
+            }
+            fp++;
+        } else {
+            if (*sp == *fp) { sp++; fp++; }
+            else break;
+        }
+    }
+    return const_cast<char*>(sp);
 }
 #endif
 
