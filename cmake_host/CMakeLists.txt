@@ -4,16 +4,20 @@
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 
 # ========================= liblog (精简，去掉 Android 专有的 pmsg/logd) ============================
-add_library(liblog STATIC
+set(LIBLOG_SOURCES
     ${SRC}/logging/liblog/log_event_list.cpp
     ${SRC}/logging/liblog/log_event_write.cpp
     ${SRC}/logging/liblog/logger_name.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/logger_write_host.cpp
     ${SRC}/logging/liblog/properties.cpp
     ${SRC}/logging/liblog/logprint.cpp
-    ${SRC}/logging/liblog/event_tag_map.cpp
     ${SRC}/logging/liblog/log_time.cpp
     )
+if(NOT WIN32)
+    # event_tag_map.cpp 使用 mmap，Windows 不支持
+    list(APPEND LIBLOG_SOURCES ${SRC}/logging/liblog/event_tag_map.cpp)
+endif()
+add_library(liblog STATIC ${LIBLOG_SOURCES})
 target_compile_definitions(liblog PRIVATE
     -DLIBLOG_LOG_TAG=1006
     -DFAKE_LOG_DEVICE=1

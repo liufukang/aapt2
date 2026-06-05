@@ -13,12 +13,26 @@
 #define __builtin_available(...) (true)
 #endif
 
-// 2. GCC C++20 下 <stdatomic.h> 不暴露 atomic_bool/atomic_int 裸类型名
-//    AOSP 头文件（cutils/trace.h, logger.h）使用了这些 C11 类型
+// 2. GCC C++20 下 <stdatomic.h> 不暴露 C11 atomic 裸类型名
+//    AOSP 头文件（cutils/trace.h, cutils/atomic.h, logger.h）大量使用这些 C11 类型
 #if defined(__cplusplus) && !defined(__clang__)
 #include <atomic>
-using atomic_bool = std::atomic<bool>;
-using atomic_int = std::atomic<int>;
+using std::atomic_bool;
+using std::atomic_int;
+using std::atomic_int_least32_t;
+using std::memory_order;
+using std::memory_order_relaxed;
+using std::memory_order_acquire;
+using std::memory_order_release;
+using std::memory_order_seq_cst;
+using std::atomic_thread_fence;
+using std::atomic_load_explicit;
+using std::atomic_store_explicit;
+using std::atomic_fetch_add_explicit;
+using std::atomic_fetch_sub_explicit;
+using std::atomic_fetch_and_explicit;
+using std::atomic_fetch_or_explicit;
+using std::atomic_compare_exchange_strong_explicit;
 #endif
 
 // 3. Windows (MinGW) 缺少 POSIX localtime_r
