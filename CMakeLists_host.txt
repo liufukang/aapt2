@@ -19,10 +19,8 @@ endif()
 set(HOST_BUILD ON)
 set(SRC ${PROJECT_SOURCE_DIR}/submodules)
 
-# GCC C++20 兼容性：全局注入 host_availability.h
-if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include ${PROJECT_SOURCE_DIR}/cmake_host/host_availability.h")
-endif()
+# host 兼容性头：全局注入（补充 AOSP 代码缺少的隐式 include，GCC 额外提供 atomic 兼容）
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include ${PROJECT_SOURCE_DIR}/cmake_host/host_availability.h")
 
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
