@@ -8,7 +8,7 @@ add_library(liblog STATIC
     ${SRC}/logging/liblog/log_event_list.cpp
     ${SRC}/logging/liblog/log_event_write.cpp
     ${SRC}/logging/liblog/logger_name.cpp
-    ${SRC}/logging/liblog/logger_write.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/logger_write_host.cpp
     ${SRC}/logging/liblog/properties.cpp
     ${SRC}/logging/liblog/logprint.cpp
     ${SRC}/logging/liblog/event_tag_map.cpp
