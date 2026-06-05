@@ -58,6 +58,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-win64.zip" -OutFile protoc.zip
           Expand-Archive protoc.zip -DestinationPath protoc
           echo "${{ github.workspace }}\protoc\bin" >> $env:GITHUB_PATH
+          echo "PROTOC_EXE=${{ github.workspace }}/protoc/bin/protoc.exe" >> $env:GITHUB_ENV
 
       # ---- 构建依赖 ----
       - name: Install build tools (Linux)
@@ -132,7 +133,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
             -DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET" \
-            -DProtobuf_PROTOC_EXECUTABLE=$(which protoc)
+            -DProtobuf_PROTOC_EXECUTABLE="$PROTOC_EXE"
 
           ninja -C build-host aapt2
 

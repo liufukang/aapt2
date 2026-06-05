@@ -57,10 +57,6 @@ else()
         )
 endif()
 add_library(libbase STATIC ${LIBBASE_SOURCES})
-# host 构建始终等价于 API 30+，GCC 不支持 Clang 的 __builtin_available
-target_compile_options(libbase PRIVATE
-    -include ${CMAKE_CURRENT_SOURCE_DIR}/host_availability.h
-    )
 target_include_directories(libbase PRIVATE
     ${SRC}/libbase/include
     ${SRC}/core/include
