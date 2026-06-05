@@ -1,8 +1,13 @@
-// host 构建兼容头：修复 GCC C++20 下的兼容性问题
+// host 构建兼容头：修复各编译器和平台的兼容性问题
 // 通过 -include 全局注入到所有编译单元
 
 #ifndef HOST_AVAILABILITY_H
 #define HOST_AVAILABILITY_H
+
+// 0. fmtlib 10.2 的 consteval 在 Clang 21+ 上有 bug，禁用
+#ifndef FMT_CONSTEVAL
+#define FMT_CONSTEVAL
+#endif
 
 // 1. GCC 不支持 Clang 的 __builtin_available(android 30, *) 语法
 #ifndef __has_builtin

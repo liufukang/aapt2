@@ -53,6 +53,12 @@ set(protobuf_BUILD_LIBPROTOC ON CACHE BOOL "" FORCE)
 # 第三方库
 add_subdirectory(submodules/fmtlib EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/libpng EXCLUDE_FROM_ALL)
+
+# expat: 只构建静态库，避免产物依赖动态库
+set(EXPAT_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(EXPAT_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(EXPAT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(EXPAT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(submodules/expat/expat EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
