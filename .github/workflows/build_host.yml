@@ -50,10 +50,25 @@ jobs:
             git
             patch
 
+      # Windows 必须禁用 CRLF 转换，否则 git apply 补丁会因行尾不匹配而失败
+      - name: Disable autocrlf (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
+
+      # checkout action 可能仍然将文件转换为 CRLF，需要强制恢复为 LF
+      - name: Normalize line endings (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git config core.autocrlf false
+          git checkout -- .
+          git submodule foreach --recursive 'git config core.autocrlf false && git checkout -- .'
 
       # ---- protoc 21.12 ----
       - name: Install protoc (Linux)
