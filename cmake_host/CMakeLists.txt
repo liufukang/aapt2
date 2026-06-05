@@ -1,5 +1,5 @@
-# macOS host 构建：精简版库 + aapt2 可执行文件
-# 裁掉了 selinux/sepol/processgroup/incfs 中 Linux 专有部分
+# host 构建：支持 macOS / Linux / Windows (MinGW)
+# 裁掉了 selinux/sepol/processgroup 等 Android/Linux 专有部分
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 
@@ -28,7 +28,7 @@ target_include_directories(liblog PRIVATE
     )
 
 # ========================= libbase ============================
-add_library(libbase STATIC
+set(LIBBASE_SOURCES
     ${SRC}/libbase/abi_compatibility.cpp
     ${SRC}/libbase/chrono_utils.cpp
     ${SRC}/libbase/file.cpp
@@ -37,7 +37,6 @@ add_library(libbase STATIC
     ${SRC}/libbase/mapped_file.cpp
     ${SRC}/libbase/parsebool.cpp
     ${SRC}/libbase/parsenetaddress.cpp
-    ${SRC}/libbase/posix_strerror_r.cpp
     ${SRC}/libbase/process.cpp
     ${SRC}/libbase/properties.cpp
     ${SRC}/libbase/result.cpp
@@ -45,8 +44,19 @@ add_library(libbase STATIC
     ${SRC}/libbase/strings.cpp
     ${SRC}/libbase/threads.cpp
     ${SRC}/libbase/test_utils.cpp
-    ${SRC}/libbase/errors_unix.cpp
     )
+if(WIN32)
+    list(APPEND LIBBASE_SOURCES
+        ${SRC}/libbase/errors_windows.cpp
+        ${SRC}/libbase/utf8.cpp
+        )
+else()
+    list(APPEND LIBBASE_SOURCES
+        ${SRC}/libbase/errors_unix.cpp
+        ${SRC}/libbase/posix_strerror_r.cpp
+        )
+endif()
+add_library(libbase STATIC ${LIBBASE_SOURCES})
 target_include_directories(libbase PRIVATE
     ${SRC}/libbase/include
     ${SRC}/core/include
@@ -54,25 +64,31 @@ target_include_directories(libbase PRIVATE
     ${SRC}/logging/liblog/include
     )
 
-# ========================= libcutils (精简，去掉 Linux 专有，加上 trace-host stub) ============================
-add_library(libcutils STATIC
+# ========================= libcutils (精简，加上 trace-host stub) ============================
+set(LIBCUTILS_SOURCES
     ${SRC}/core/libcutils/config_utils.cpp
-    ${SRC}/core/libcutils/fs.cpp
     ${SRC}/core/libcutils/hashmap.cpp
     ${SRC}/core/libcutils/load_file.cpp
-    ${SRC}/core/libcutils/multiuser.cpp
     ${SRC}/core/libcutils/native_handle.cpp
-    ${SRC}/core/libcutils/properties.cpp
-    ${SRC}/core/libcutils/record_stream.cpp
-    ${SRC}/core/libcutils/socket_inaddr_any_server_unix.cpp
-    ${SRC}/core/libcutils/socket_local_client_unix.cpp
-    ${SRC}/core/libcutils/socket_local_server_unix.cpp
-    ${SRC}/core/libcutils/socket_network_client_unix.cpp
-    ${SRC}/core/libcutils/sockets_unix.cpp
-    ${SRC}/core/libcutils/sockets.cpp
-    ${SRC}/core/libcutils/str_parms.cpp
     ${SRC}/core/libcutils/trace-host.cpp
     )
+if(NOT WIN32)
+    # POSIX socket 相关文件仅在 Unix 系统编译
+    list(APPEND LIBCUTILS_SOURCES
+        ${SRC}/core/libcutils/fs.cpp
+        ${SRC}/core/libcutils/multiuser.cpp
+        ${SRC}/core/libcutils/properties.cpp
+        ${SRC}/core/libcutils/record_stream.cpp
+        ${SRC}/core/libcutils/socket_inaddr_any_server_unix.cpp
+        ${SRC}/core/libcutils/socket_local_client_unix.cpp
+        ${SRC}/core/libcutils/socket_local_server_unix.cpp
+        ${SRC}/core/libcutils/socket_network_client_unix.cpp
+        ${SRC}/core/libcutils/sockets_unix.cpp
+        ${SRC}/core/libcutils/sockets.cpp
+        ${SRC}/core/libcutils/str_parms.cpp
+        )
+endif()
+add_library(libcutils STATIC ${LIBCUTILS_SOURCES})
 target_compile_definitions(libcutils PRIVATE -D_GNU_SOURCE)
 target_include_directories(libcutils PRIVATE
     ${SRC}/core/libutils/include
@@ -412,3 +428,8 @@ target_link_libraries(aapt2
     png_static
     ZLIB::ZLIB
     )
+
+# Windows 额外链接库
+if(WIN32)
+    target_link_libraries(aapt2 ws2_32 shlwapi)
+endif()

@@ -1,0 +1,135 @@
+name: Build Host aapt2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS (universal)
+            artifact: aapt2-darwin
+            build_args: universal
+          - os: ubuntu-latest
+            name: Linux (x86_64)
+            artifact: aapt2-linux-x86_64
+            build_args: ""
+          - os: windows-latest
+            name: Windows (x86_64)
+            artifact: aapt2-windows-x86_64
+            build_args: ""
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      # ---- protoc 21.12 ----
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          wget -q https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip
+          sudo unzip -j protoc-*.zip bin/protoc -d /usr/local/bin/
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -sLO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-osx-aarch_64.zip
+          sudo unzip -j protoc-*.zip bin/protoc -d /usr/local/bin/
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-win64.zip" -OutFile protoc.zip
+          Expand-Archive protoc.zip -DestinationPath protoc
+          echo "${{ github.workspace }}\protoc\bin" >> $env:GITHUB_PATH
+
+      # ---- 构建依赖 ----
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build zlib1g-dev
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+
+      # ---- 打补丁 ----
+      - name: Apply patches (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            ./patch_local.sh
+          else
+            ./patch.sh
+          fi
+
+      - name: Apply patches (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: ./patch.sh
+
+      # ---- 构建版本号 ----
+      - name: Set build number
+        shell: bash
+        run: echo "AAPT2_BUILD_NUMBER=$(date +%Y%m%d)01" >> $GITHUB_ENV
+
+      # ---- 编译 ----
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          PROTOC_PATH=$(which protoc) AAPT2_BUILD_NUMBER=${{ env.AAPT2_BUILD_NUMBER }} \
+            ./build_host.sh ${{ matrix.build_args }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cp CMakeLists.txt CMakeLists.txt.bak
+          cp CMakeLists_host.txt CMakeLists.txt
+
+          cmake -GNinja \
+            -B build-host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DProtobuf_PROTOC_EXECUTABLE=$(which protoc)
+
+          ninja -C build-host aapt2
+
+          mv CMakeLists.txt.bak CMakeLists.txt
+          mkdir -p build/bin
+          cp build-host/bin/aapt2.exe build/bin/
+
+      # ---- 验证 ----
+      - name: Verify
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            file build/bin/aapt2.exe
+            ./build/bin/aapt2.exe version || true
+          else
+            file build/bin/aapt2
+            ./build/bin/aapt2 version
+          fi
+
+      # ---- 上传产物 ----
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            build/bin/aapt2
+            build/bin/aapt2.exe

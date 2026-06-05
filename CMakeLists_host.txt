@@ -4,19 +4,24 @@ project(aapt2-host)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wno-attributes")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wno-attributes")
+# 平台相关编译选项
+if(WIN32)
+    # Windows (MinGW) 不需要 -fPIC
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-attributes")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
+    # 静态链接 libgcc/libstdc++，产物不依赖 MinGW 运行时
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wno-attributes")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wno-attributes")
+endif()
 
-# macOS host 构建标识
 set(HOST_BUILD ON)
-
-# 源码根目录
 set(SRC ${PROJECT_SOURCE_DIR}/submodules)
 
-# 64-bit off_t
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
-# macOS 兼容性定义
+# 通用 host 构建定义
 add_definitions(
     -DFAKE_LOG_DEVICE=1
     -DSTATIC_ANDROIDFW_FOR_TOOLS
@@ -27,21 +32,30 @@ add_definitions(
     -DNO_DB_BACKEND
 )
 
+# Windows 额外定义
+if(WIN32)
+    add_definitions(
+        -DUSE_MINGW
+        -D_WIN32_WINNT=0x0601
+        -DNOMINMAX
+        -DUNICODE
+        -D_UNICODE
+    )
+endif()
+
 # protobuf 配置
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "" FORCE)
 set(protobuf_BUILD_LIBPROTOC ON CACHE BOOL "" FORCE)
 
-# 第三方库（仅需要的）
+# 第三方库
 add_subdirectory(submodules/fmtlib EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/libpng EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/expat/expat EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
 
-# 系统 zlib（macOS 自带）
 find_package(ZLIB REQUIRED)
 
-# ========== host 版构建模块 ==========
 add_subdirectory(cmake_host)

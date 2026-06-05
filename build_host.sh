@@ -2,12 +2,13 @@
 set -e
 
 # 在 macOS 上原生编译 aapt2（Mach-O 格式，可直接在 Mac 上运行）
-# 用法: ./build_host.sh
+# 用法: ./build_host.sh          # 编译当前架构
+#       ./build_host.sh universal # 编译 universal binary (arm64 + x86_64)
 # 依赖: cmake, ninja, protoc 21.12
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build-host"
 PROTOC_PATH="${PROTOC_PATH:-/tmp/protoc-21.12/bin/protoc}"
+UNIVERSAL="${1:-}"
 
 if [[ ! -x "$PROTOC_PATH" ]]; then
     echo "Error: protoc not found at: $PROTOC_PATH"
@@ -16,31 +17,51 @@ if [[ ! -x "$PROTOC_PATH" ]]; then
     exit 1
 fi
 
-echo "=== Building aapt2 for macOS host ==="
-echo "  protoc: $PROTOC_PATH"
-echo "  arch: $(uname -m)"
-
 # 使用 host 专用的 CMakeLists（临时替换，编译后恢复）
 cp "$SCRIPT_DIR/CMakeLists.txt" "$SCRIPT_DIR/CMakeLists.txt.bak"
 cp "$SCRIPT_DIR/CMakeLists_host.txt" "$SCRIPT_DIR/CMakeLists.txt"
 
-# 确保编译后恢复原始 CMakeLists.txt
 cleanup() {
     mv "$SCRIPT_DIR/CMakeLists.txt.bak" "$SCRIPT_DIR/CMakeLists.txt" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-cmake -GNinja \
-  -B "$BUILD_DIR" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DProtobuf_PROTOC_EXECUTABLE="$PROTOC_PATH"
+# 编译单个架构的函数
+build_arch() {
+    local arch="$1"
+    local build_dir="$SCRIPT_DIR/build-host-$arch"
 
-ninja -C "$BUILD_DIR" aapt2
+    echo "=== Building aapt2 for macOS $arch ==="
+    cmake -GNinja \
+      -B "$build_dir" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_ARCHITECTURES="$arch" \
+      -DProtobuf_PROTOC_EXECUTABLE="$PROTOC_PATH"
 
-# 复制到统一输出目录
+    ninja -C "$build_dir" aapt2
+}
+
 mkdir -p "$SCRIPT_DIR/build/bin"
-cp "$BUILD_DIR/bin/aapt2" "$SCRIPT_DIR/build/bin/aapt2"
 
-echo "=== Done: build/bin/aapt2 ==="
+if [[ "$UNIVERSAL" == "universal" ]]; then
+    # 分别编译 arm64 和 x86_64，再用 lipo 合并
+    build_arch arm64
+    build_arch x86_64
+
+    lipo -create \
+      "$SCRIPT_DIR/build-host-arm64/bin/aapt2" \
+      "$SCRIPT_DIR/build-host-x86_64/bin/aapt2" \
+      -output "$SCRIPT_DIR/build/bin/aapt2"
+
+    echo "=== Done: build/bin/aapt2 (universal) ==="
+else
+    # 仅编译当前架构
+    ARCH="$(uname -m)"
+    build_arch "$ARCH"
+    cp "$SCRIPT_DIR/build-host-$ARCH/bin/aapt2" "$SCRIPT_DIR/build/bin/aapt2"
+
+    echo "=== Done: build/bin/aapt2 ($ARCH) ==="
+fi
+
 file "$SCRIPT_DIR/build/bin/aapt2"
 "$SCRIPT_DIR/build/bin/aapt2" version 2>&1 || true
