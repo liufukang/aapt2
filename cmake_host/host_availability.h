@@ -35,10 +35,11 @@ using std::atomic_fetch_or_explicit;
 using std::atomic_compare_exchange_strong_explicit;
 #endif
 
-// 3. AOSP 源码部分文件依赖隐式 include，GCC 更严格
+// 3. AOSP 源码部分文件依赖隐式 include，Linux 标准库不提供
 #if defined(__cplusplus)
 #include <cstring>
 #include <cstdlib>
+#include <limits>
 #endif
 
 // 4. Windows (MinGW) 缺少 POSIX localtime_r
