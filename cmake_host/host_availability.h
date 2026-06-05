@@ -21,4 +21,13 @@ using atomic_bool = std::atomic<bool>;
 using atomic_int = std::atomic<int>;
 #endif
 
+// 3. Windows (MinGW) 缺少 POSIX localtime_r
+#if defined(_WIN32) && !defined(localtime_r)
+#include <time.h>
+static inline struct tm* localtime_r(const time_t* timep, struct tm* result) {
+    localtime_s(result, timep);
+    return result;
+}
+#endif
+
 #endif // HOST_AVAILABILITY_H
