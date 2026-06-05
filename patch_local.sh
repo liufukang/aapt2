@@ -36,6 +36,9 @@ git apply "patches/32bsystem_on_armv8.patch" || echo "WARNING: 32bsystem_on_armv
 # map_ptr const_iterator 缺少 operator-- 导致 libstdc++ 编译失败
 git -C "submodules/incremental_delivery" apply "../../patches/map_ptr_iterator.patch" || echo "WARNING: map_ptr_iterator.patch failed (may already be applied)"
 
+# ZipStringOffset20 位域打包在 Windows MSVC ABI 下 sizeof != 4
+git -C "submodules/libziparchive" apply "../../patches/ziparchive_bitfield.patch" || echo "WARNING: ziparchive_bitfield.patch failed (may already be applied)"
+
 # 创建符号链接
 ln -sf "$(pwd)/submodules/googletest" "submodules/boringssl/src/third_party/googletest" 2>/dev/null || true
 
