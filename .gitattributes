@@ -1,0 +1,3 @@
+# 确保补丁文件和 shell 脚本在所有平台保持 LF 行尾
+*.patch text eol=lf
+*.sh text eol=lf

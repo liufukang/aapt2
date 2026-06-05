@@ -30,6 +30,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Disable autocrlf (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -81,7 +85,24 @@ jobs:
       - name: Apply patches (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: ./patch.sh
+        run: |
+          mkdir -p "submodules/incremental_delivery/sysprop/include/"
+          cp "misc/IncrementalProperties.sysprop.h" "submodules/incremental_delivery/sysprop/include/"
+          cp "misc/IncrementalProperties.sysprop.cpp" "submodules/incremental_delivery/sysprop/"
+          cp "misc/platform_tools_version.h" "submodules/soong/cc/libbuildversion/include"
+
+          sed -i "s#frameworks/base/tools/aapt2/Configuration.proto#Configuration.proto#g" \
+            "submodules/base/tools/aapt2/Resources.proto" \
+            "submodules/base/tools/aapt2/ResourcesInternal.proto"
+          sed -i "s#frameworks/base/tools/aapt2/Resources.proto#Resources.proto#g" \
+            "submodules/base/tools/aapt2/ApkInfo.proto" \
+            "submodules/base/tools/aapt2/ResourcesInternal.proto"
+
+          git apply "patches/apktool_ibotpeaches.patch"
+          git apply "patches/protobuf.patch"
+          git apply "patches/32bsystem_on_armv8.patch"
+
+          cp -r "submodules/googletest" "submodules/boringssl/src/third_party/googletest"
 
       # ---- 构建版本号 ----
       - name: Set build number
