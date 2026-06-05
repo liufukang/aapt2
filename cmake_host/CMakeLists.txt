@@ -53,6 +53,7 @@ if(WIN32)
     list(APPEND LIBBASE_SOURCES
         ${SRC}/libbase/errors_windows.cpp
         ${SRC}/libbase/utf8.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/posix_strerror_r_host.cpp
         )
 else()
     list(APPEND LIBBASE_SOURCES
