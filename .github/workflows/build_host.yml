@@ -70,7 +70,11 @@ jobs:
 
       - name: Install build tools (Windows)
         if: runner.os == 'Windows'
-        run: choco install ninja cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+        run: |
+          choco install ninja cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          vcpkg install zlib:x64-mingw-static
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          echo "VCPKG_TARGET_TRIPLET=x64-mingw-static" >> $env:GITHUB_ENV
 
       # ---- 打补丁 ----
       - name: Apply patches (Unix)
@@ -126,6 +130,8 @@ jobs:
           cmake -GNinja \
             -B build-host \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
+            -DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET" \
             -DProtobuf_PROTOC_EXECUTABLE=$(which protoc)
 
           ninja -C build-host aapt2

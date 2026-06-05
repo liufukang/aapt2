@@ -74,7 +74,7 @@ set(LIBCUTILS_SOURCES
     ${SRC}/core/libcutils/hashmap.cpp
     ${SRC}/core/libcutils/load_file.cpp
     ${SRC}/core/libcutils/native_handle.cpp
-    ${SRC}/core/libcutils/trace-host.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/trace_host_stub.cpp
     )
 if(NOT WIN32)
     # POSIX socket 相关文件仅在 Unix 系统编译
