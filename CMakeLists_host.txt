@@ -1,0 +1,47 @@
+cmake_minimum_required(VERSION 3.14.2)
+project(aapt2-host)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wno-attributes")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wno-attributes")
+
+# macOS host 构建标识
+set(HOST_BUILD ON)
+
+# 源码根目录
+set(SRC ${PROJECT_SOURCE_DIR}/submodules)
+
+# 64-bit off_t
+add_definitions(-D_FILE_OFFSET_BITS=64)
+
+# macOS 兼容性定义
+add_definitions(
+    -DFAKE_LOG_DEVICE=1
+    -DSTATIC_ANDROIDFW_FOR_TOOLS
+    -D_GNU_SOURCE
+    -DNDEBUG
+    -DNO_MEDIA_BACKEND
+    -DNO_X_BACKEND
+    -DNO_DB_BACKEND
+)
+
+# protobuf 配置
+set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "" FORCE)
+set(protobuf_BUILD_LIBPROTOC ON CACHE BOOL "" FORCE)
+
+# 第三方库（仅需要的）
+add_subdirectory(submodules/fmtlib EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/libpng EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/expat/expat EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
+
+# 系统 zlib（macOS 自带）
+find_package(ZLIB REQUIRED)
+
+# ========== host 版构建模块 ==========
+add_subdirectory(cmake_host)
