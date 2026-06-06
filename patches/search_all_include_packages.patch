@@ -1,35 +1,102 @@
-From 583a9551e3fb05eede68c2be777f7fc80a9f057e Mon Sep 17 00:00:00 2001
-From: "liufukang.11" <liufukang.11@jd.com>
-Date: Fri, 5 Jun 2026 23:20:24 +0800
-Subject: [PATCH] add --search-all-include-packages support
-
----
- tools/aapt2/Main.cpp                         |  1 +
- tools/aapt2/cmd/Link.cpp                     | 11 +++++++++
- tools/aapt2/cmd/Link.h                       |  7 ++++++
- tools/aapt2/link/ReferenceLinker.cpp         | 16 +++++++++++++
- tools/aapt2/process/IResourceTableConsumer.h |  1 +
- tools/aapt2/process/SymbolTable.cpp          | 21 ++++++++++++++++
- tools/aapt2/process/SymbolTable.h            | 25 ++++++++++++++++++++
- 7 files changed, 82 insertions(+)
-
-diff --git a/submodules/base/tools/aapt2/Main.cpp b/submodules/base/tools/aapt2/Main.cpp
-index b351d6ee4f33..45b185fbb88f 100644
---- a/submodules/base/tools/aapt2/Main.cpp
-+++ b/submodules/base/tools/aapt2/Main.cpp
-@@ -57,6 +57,7 @@ class VersionCommand : public Command {
+diff --git a/tools/aapt2/ApkInfo.proto b/tools/aapt2/ApkInfo.proto
+index b5ff71fa5935..044cca35cd08 100644
+--- a/tools/aapt2/ApkInfo.proto
++++ b/tools/aapt2/ApkInfo.proto
+@@ -16,7 +16,7 @@
+ 
+ syntax = "proto3";
+ 
+-import "frameworks/base/tools/aapt2/Resources.proto";
++import "Resources.proto";
+ 
+ package aapt.pb;
+ 
+diff --git a/tools/aapt2/Main.cpp b/tools/aapt2/Main.cpp
+index b351d6ee4f33..3becf5221337 100644
+--- a/tools/aapt2/Main.cpp
++++ b/tools/aapt2/Main.cpp
+@@ -57,6 +57,8 @@ class VersionCommand : public Command {
    int Action(const std::vector<std::string>& /* args */) override {
      std::cerr << StringPrintf("%s %s", util::GetToolName(), util::GetToolFingerprint().c_str())
                << std::endl;
 +    std::cerr << "  [+] add --search-all-include-packages flag support" << std::endl;
++    std::cerr << "  [+] add --disable-visibility-check flag (default: true)" << std::endl;
      return 0;
    }
  };
-diff --git a/submodules/base/tools/aapt2/cmd/Link.cpp b/submodules/base/tools/aapt2/cmd/Link.cpp
-index f1348ce71458..7d461a4dd386 100644
---- a/submodules/base/tools/aapt2/cmd/Link.cpp
-+++ b/submodules/base/tools/aapt2/cmd/Link.cpp
-@@ -897,6 +897,7 @@ class Linker {
+diff --git a/tools/aapt2/ResourceTable.cpp b/tools/aapt2/ResourceTable.cpp
+index a3b0b45df5c3..1ddb4f12dcc1 100644
+--- a/tools/aapt2/ResourceTable.cpp
++++ b/tools/aapt2/ResourceTable.cpp
+@@ -470,9 +470,10 @@ bool ResourceTable::AddResource(NewResource&& res, android::IDiagnostics* diag)
+   const bool validate = validation_ == Validation::kEnabled;
+   const android::Source source = res.value ? res.value->GetSource() : android::Source{};
+   if (validate && !res.allow_mangled && !IsValidResourceEntryName(res.name.entry)) {
+-    diag->Error(android::DiagMessage(source)
+-                << "resource '" << res.name << "' has invalid entry name '" << res.name.entry);
+-    return false;
++    // Apktool
++    // diag->Error(android::DiagMessage(source)
++    //             << "resource '" << res.name << "' has invalid entry name '" << res.name.entry);
++    // return false;
+   }
+ 
+   if (res.id.has_value() && !res.id->first.is_valid()) {
+diff --git a/tools/aapt2/ResourceUtils.cpp b/tools/aapt2/ResourceUtils.cpp
+index d358df98ada6..7daa7b21e5aa 100644
+--- a/tools/aapt2/ResourceUtils.cpp
++++ b/tools/aapt2/ResourceUtils.cpp
+@@ -217,7 +217,8 @@ bool ParseAttributeReference(StringPiece str, ResourceNameRef* out_ref) {
+     }
+ 
+     if (!type.empty() && type != "attr") {
+-      return false;
++      // Apktool: Don't die out if private resource.
++      // return false;
+     }
+ 
+     if (entry.empty()) {
+diff --git a/tools/aapt2/Resources.proto b/tools/aapt2/Resources.proto
+index 1d7fd1d17dcd..e6861d4e2133 100644
+--- a/tools/aapt2/Resources.proto
++++ b/tools/aapt2/Resources.proto
+@@ -16,7 +16,7 @@
+ 
+ syntax = "proto3";
+ 
+-import "frameworks/base/tools/aapt2/Configuration.proto";
++import "Configuration.proto";
+ 
+ package aapt.pb;
+ 
+diff --git a/tools/aapt2/ResourcesInternal.proto b/tools/aapt2/ResourcesInternal.proto
+index b0ed3da33368..97aa5af7724f 100644
+--- a/tools/aapt2/ResourcesInternal.proto
++++ b/tools/aapt2/ResourcesInternal.proto
+@@ -16,8 +16,8 @@
+ 
+ syntax = "proto3";
+ 
+-import "frameworks/base/tools/aapt2/Configuration.proto";
+-import "frameworks/base/tools/aapt2/Resources.proto";
++import "Configuration.proto";
++import "Resources.proto";
+ 
+ package aapt.pb.internal;
+ 
+diff --git a/tools/aapt2/cmd/Link.cpp b/tools/aapt2/cmd/Link.cpp
+index 642a5618b6ad..64ebbe5e8f9b 100644
+--- a/tools/aapt2/cmd/Link.cpp
++++ b/tools/aapt2/cmd/Link.cpp
+@@ -21,6 +21,7 @@
+ #include <algorithm>
+ #include <cinttypes>
+ #include <queue>
++#include <set>
+ #include <unordered_map>
+ #include <vector>
+ 
+@@ -897,6 +898,7 @@ class Linker {
  
      // Capture the shared libraries so that the final resource table can be properly flattened
      // with support for shared libraries.
@@ -37,38 +104,180 @@ index f1348ce71458..7d461a4dd386 100644
      for (auto& entry : asset_source->GetAssignedPackageIds()) {
        if (entry.first == kAppPackageId) {
          // Capture the included base feature package.
-@@ -915,6 +916,16 @@ class Linker {
-       } else if (asset_source->IsPackageDynamic(entry.first, entry.second)) {
-         final_table_.included_packages_[entry.first] = entry.second;
+@@ -917,6 +919,23 @@ class Linker {
        }
-+      // 收集非 android 包名，用于 --search-all-include-packages 回退搜索
-+      if (entry.second != "android") {
-+        include_pkg_names.push_back(entry.second);
-+      }
-+    }
-+
-+    // 设置 include 包名到 SymbolTable，供 ReferenceLinker 回退搜索使用
-+    if (options_.search_all_include_packages) {
-+      context_->GetExternalSymbols()->SetSearchAllIncludePackages(true);
-+      context_->GetExternalSymbols()->SetIncludePackageNames(std::move(include_pkg_names));
      }
  
++    // 使用 GetAllPackageNames 收集所有不同的包名（包括同一 PackageGroup 中的不同名字），
++    // 确保多个 bundle 共享同一 packageId 但使用不同包名时都能被搜索到
++    if (options_.search_all_include_packages) {
++      include_pkg_names = asset_source->GetAllPackageNames();
++      // 移除 android 包
++      include_pkg_names.erase(
++          std::remove(include_pkg_names.begin(), include_pkg_names.end(), "android"),
++          include_pkg_names.end());
++      context_->GetExternalSymbols()->SetSearchAllIncludePackages(true);
++      context_->GetExternalSymbols()->SetIncludePackageNames(std::move(include_pkg_names));
++    }
++
++    // 设置可见性检查开关（默认 true 表示禁用检查，允许引用非 PUBLIC 资源）
++    context_->GetExternalSymbols()->SetDisableVisibilityCheck(options_.disable_visibility_check);
++
++    // 保存裸指针用于在 IdAssigner 前预填充 0x7F 资源
++    asset_source_ptr_ = asset_source.get();
      context_->GetExternalSymbols()->AppendSource(std::move(asset_source));
-diff --git a/submodules/base/tools/aapt2/cmd/Link.h b/submodules/base/tools/aapt2/cmd/Link.h
-index 7d3111d5e712..29560bfc570c 100644
---- a/submodules/base/tools/aapt2/cmd/Link.h
-+++ b/submodules/base/tools/aapt2/cmd/Link.h
-@@ -116,6 +116,9 @@ struct LinkOptions {
+     return true;
+   }
+@@ -2069,6 +2088,65 @@ class Linker {
+         return 1;
+       }
+ 
++      // 在 IdAssigner 运行前，将 -I bundle 中所有 0x7F 资源预填充到 host ResourceTable。
++      // 使用 bundle 的原始全局 ID（SetId），使 IdAssigner 按 bundle 原始位置分配 ID：
++      // - Type ID 沿用 bundle 的全局 Type ID（ArscRewriter 已转换为全局体系）
++      // - Entry ID 沿用 bundle 的原始 Entry 位置
++      // 这样 R.class、binary XML 中的 ID 直接匹配 bundle arsc 的位置，
++      // HostEntryRearranger 无需重排这些 entry，MergeBundleResourcesTask 注入时 index 对齐。
++      if (asset_source_ptr_ && options_.search_all_include_packages) {
++        auto all_7f = asset_source_ptr_->GetAll7fResources();
++        if (!all_7f.empty()) {
++          const std::string& host_package = context_->GetCompilationPackage();
++          std::set<std::pair<ResourceNamedType, std::string>> existing;
++          // 收集 final_table_ 中已有的资源（type + entry name），避免重复添加
++          for (const auto& package : final_table_.packages) {
++            for (const auto& type : package->types) {
++              for (const auto& entry : type->entries) {
++                existing.insert(std::make_pair(type->named_type, entry->name));
++              }
++            }
++          }
++          int added = 0;
++          int pinned_existing = 0;
++          int skipped_conflict = 0;
++          for (const auto& [res_name, res_id] : all_7f) {
++            ResourceName host_res_name(host_package, res_name.type, res_name.entry);
++            if (existing.count(std::make_pair(res_name.type, res_name.entry)) > 0) {
++              // host 已有同名资源：固定其 ID 到 bundle 位置，使 IdAssigner 直接分配
++              // 到该位置，HostEntryRearranger 不需要再移动它，R.class 值与 arsc 一致
++              final_table_.AddResource(
++                  NewResourceBuilder(host_res_name)
++                      .SetId(res_id, OnIdConflict::CREATE_ENTRY)
++                      .SetAllowMangled(true)
++                      .Build(),
++                  context_->GetDiagnostics());
++              pinned_existing++;
++              continue;
++            }
++            // 新增 bundle entry：设置 bundle 原始全局 ID，不设 value（offset=-1），
++            // MergeBundleResourcesTask 后续注入 bundle 实际值
++            bool result = final_table_.AddResource(
++                NewResourceBuilder(host_res_name)
++                    .SetId(res_id, OnIdConflict::CREATE_ENTRY)
++                    .SetAllowMangled(true)
++                    .Build(),
++                context_->GetDiagnostics());
++            if (result) {
++              added++;
++            } else {
++              skipped_conflict++;
++            }
++          }
++          if (added > 0 || pinned_existing > 0) {
++            context_->GetDiagnostics()->Note(android::DiagMessage()
++                << "pre-populated " << added << " new + pinned " << pinned_existing
++                << " existing entries to bundle positions"
++                << " (skipped " << skipped_conflict << " conflicts)");
++          }
++        }
++      }
++
+       // Assign IDs if we are building a regular app.
+       IdAssigner id_assigner(&options_.stable_id_map);
+       if (!id_assigner.Consume(context_, &final_table_)) {
+@@ -2383,6 +2461,9 @@ class Linker {
+ 
+   // The package name of the base application, if it is included.
+   std::optional<std::string> included_feature_base_;
++
++  // 保存 AssetManagerSymbolSource 指针，用于在 IdAssigner 前预填充 0x7F 资源
++  AssetManagerSymbolSource* asset_source_ptr_ = nullptr;
+ };
+ 
+ int LinkCommand::Action(const std::vector<std::string>& args) {
+@@ -2483,10 +2564,11 @@ int LinkCommand::Action(const std::vector<std::string>& args) {
+     if (package_id_int > std::numeric_limits<uint8_t>::max()
+         || package_id_int == kFrameworkPackageId
+         || (!options_.allow_reserved_package_id && package_id_int < kAppPackageId)) {
+-      context.GetDiagnostics()->Error(
++      context.GetDiagnostics()->Warn(
+           android::DiagMessage() << StringPrintf(
+-              "invalid package ID 0x%02x. Must be in the range 0x7f-0xff.", package_id_int));
+-      return 1;
++              "invalid package ID 0x%02x. Must be in the range 0x7f-0xff. Ignoring...", package_id_int));
++      // Apktool
++      // return 1;
+     }
+     context.SetPackageId(static_cast<uint8_t>(package_id_int));
+   }
+@@ -2589,6 +2671,23 @@ int LinkCommand::Action(const std::vector<std::string>& args) {
+       ".mpg", ".mpeg", ".mp4", ".m4a", ".m4v", ".3gp", ".3gpp", ".3g2", ".3gpp2", ".wma", ".wmv",
+       ".webm", ".mkv"});
+ 
++  // Populate no compress extensions specified in the extensions file.
++  if (options_.extensions_to_not_compress_path) {
++    std::ifstream extensionsFile(options_.extensions_to_not_compress_path.value());
++
++    if (extensionsFile.fail()) {
++      context.GetDiagnostics()->Error(
++        android::DiagMessage() << "could not open extensions file "
++          << options_.extensions_to_not_compress_path.value()
++          << " for reading");
++      return 1;
++    }
++
++    for (std::string line; getline(extensionsFile, line);) {
++      options_.extensions_to_not_compress.insert(line);
++    }
++  }
++
+   // Turn off auto versioning for static-libs.
+   if (context.GetPackageType() == PackageType::kStaticLib) {
+     options_.no_auto_version = true;
+diff --git a/tools/aapt2/cmd/Link.h b/tools/aapt2/cmd/Link.h
+index 2f17853718ec..310e4553a3e3 100644
+--- a/tools/aapt2/cmd/Link.h
++++ b/tools/aapt2/cmd/Link.h
+@@ -78,6 +78,7 @@ struct LinkOptions {
+   bool use_sparse_encoding = false;
+   std::unordered_set<std::string> extensions_to_not_compress;
+   std::optional<std::regex> regex_to_not_compress;
++  std::optional<std::string> extensions_to_not_compress_path;
+   FeatureFlagValues feature_flag_values;
+ 
+   // Static lib options.
+@@ -115,6 +116,12 @@ struct LinkOptions {
  
    // Whether we should fail on definitions of a resource with conflicting visibility.
    bool strict_visibility = false;
 +
 +  // 非限定引用解析失败时，搜索所有 -I include 包（android 包除外）
 +  bool search_all_include_packages = false;
++
++  // 禁用资源可见性检查，允许引用 -I 包中的非 PUBLIC 资源（默认 true）
++  bool disable_visibility_check = true;
  };
  
  class LinkCommand : public Command {
-@@ -344,6 +347,10 @@ class LinkCommand : public Command {
+@@ -291,6 +298,8 @@ class LinkCommand : public Command {
+                     &options_.manifest_fixer_options.rename_overlay_category);
+     AddOptionalFlagList("-0", "File suffix not to compress.",
+         &options_.extensions_to_not_compress);
++    AddOptionalFlag("-e", "File containing list of extensions not to compress.",
++        &options_.extensions_to_not_compress_path);
+     AddOptionalSwitch("--no-compress", "Do not compress any resources.",
+         &options_.do_not_compress_anything);
+     AddOptionalSwitch("--keep-raw-values", "Preserve raw attribute values in xml files.",
+@@ -341,6 +350,14 @@ class LinkCommand : public Command {
                        "updatableSystem=\"false\" to the root manifest node, overwriting any\n"
                        "existing attribute. This is ignored if the manifest has a versionCode.",
                        &options_.manifest_fixer_options.non_updatable_system);
@@ -76,28 +285,77 @@ index 7d3111d5e712..29560bfc570c 100644
 +                      "When resolving non-qualified resource references, search all -I\n"
 +                      "include packages as fallback (excluding android framework).",
 +                      &options_.search_all_include_packages);
++    AddOptionalSwitch("--disable-visibility-check",
++                      "Disable resource visibility check, allowing references to non-public\n"
++                      "resources in -I packages. Enabled by default.",
++                      &options_.disable_visibility_check);
    }
  
    int Action(const std::vector<std::string>& args) override;
-diff --git a/submodules/base/tools/aapt2/link/ReferenceLinker.cpp b/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
-index c76626254df8..14f774de9f09 100644
---- a/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
-+++ b/submodules/base/tools/aapt2/link/ReferenceLinker.cpp
-@@ -277,6 +277,22 @@ const SymbolTable::Symbol* ReferenceLinker::ResolveSymbol(const Reference& refer
+diff --git a/tools/aapt2/java/JavaClassGenerator.cpp b/tools/aapt2/java/JavaClassGenerator.cpp
+index 6e73b017cce2..f79f57d25720 100644
+--- a/tools/aapt2/java/JavaClassGenerator.cpp
++++ b/tools/aapt2/java/JavaClassGenerator.cpp
+@@ -58,7 +58,9 @@ static const std::set<StringPiece> sJavaIdentifiers = {
+     "true",       "false",        "null"};
+ 
+ static bool IsValidSymbol(StringPiece symbol) {
+-  return sJavaIdentifiers.find(symbol) == sJavaIdentifiers.end();
++  // Apktool: Everything is a valid symbol
++  return true;
++  // return sJavaIdentifiers.find(symbol) == sJavaIdentifiers.end();
+ }
+ 
+ // Java symbols can not contain . or -, but those are valid in a resource name.
+@@ -391,6 +393,12 @@ bool JavaClassGenerator::ProcessStyleable(const ResourceNameRef& name, const Res
+   for (size_t i = 0; i < attr_count; i++) {
+     const StyleableAttr& styleable_attr = sorted_attributes[i];
+     if (SkipSymbol(styleable_attr.symbol)) {
++      // 即使跳过 Java class 生成，也必须输出 R.txt 的 child 行，
++      // 保证 R.txt 中 styleable 数组元素数量和 child 行数量一致
++      if (r_txt_printer != nullptr) {
++        r_txt_printer->Println(
++            StringPrintf("int styleable %s %zd", sorted_attributes[i].field_name.c_str(), i));
++      }
+       continue;
+     }
+ 
+diff --git a/tools/aapt2/link/PrivateAttributeMover.cpp b/tools/aapt2/link/PrivateAttributeMover.cpp
+index 8c6c743dfff0..f9a70d3fca0b 100644
+--- a/tools/aapt2/link/PrivateAttributeMover.cpp
++++ b/tools/aapt2/link/PrivateAttributeMover.cpp
+@@ -82,7 +82,8 @@ bool PrivateAttributeMover::Consume(IAaptContext* context, ResourceTable* table)
+ 
+     auto attr_private_type = ResourceNamedTypeWithDefaultName(ResourceType::kAttrPrivate);
+     ResourceTableType* priv_attr_type = package->FindOrCreateType(attr_private_type);
+-    CHECK(priv_attr_type->entries.empty());
++    // Apktool
++    // CHECK(priv_attr_type->entries.empty());
+     priv_attr_type->entries = std::move(private_attr_entries);
+   }
+   return true;
+diff --git a/tools/aapt2/link/ReferenceLinker.cpp b/tools/aapt2/link/ReferenceLinker.cpp
+index c69b32513167..ff92855bc3b7 100644
+--- a/tools/aapt2/link/ReferenceLinker.cpp
++++ b/tools/aapt2/link/ReferenceLinker.cpp
+@@ -277,9 +277,51 @@ const SymbolTable::Symbol* ReferenceLinker::ResolveSymbol(const Reference& refer
            }
          }
        }
-+
-+      // 搜索所有 -I include 包作为回退（跳过 callsite 自身包）
-+      // 使用 FindByNameNoMangle 避免 NameMangler 将包名 mangle 成错误的形式
++      // 搜索所有 -I include 包（包括 0x7F）中的资源（跳过 callsite 自身的包）。
++      // bundle 的 0x7F 资源会被引用，后续由 RemapHostResourceIdsTask 重映射 ID
 +      if (symbols->GetSearchAllIncludePackages()) {
 +        const auto& pkg_names = symbols->GetIncludePackageNames();
 +        for (const std::string& pkg : pkg_names) {
-+          if (pkg == callsite.package) {
-+            continue;
-+          }
++          if (pkg == callsite.package) continue;
 +          symbol = symbols->FindByNameNoMangle(ResourceName(pkg, name.type, name.entry));
-+          if (symbol) {
++          if (symbol && symbol->id) {
++            // 记录 0x7F fallback 资源，用于生成 R 类字段
++            if (symbol->id.value().package_id() == kAppPackageId) {
++              symbols->RecordFallbackResolvedEntry(
++                  ResourceName(callsite.package, name.type, name.entry),
++                  symbol->id.value());
++            }
 +            return symbol;
 +          }
 +        }
@@ -105,24 +363,61 @@ index c76626254df8..14f774de9f09 100644
 +
        return nullptr;
      }
-     return symbols->FindByName(name);
-diff --git a/submodules/base/tools/aapt2/process/IResourceTableConsumer.h b/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
-index e41e45a29b3e..fc8d7e9dd97a 100644
---- a/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
-+++ b/submodules/base/tools/aapt2/process/IResourceTableConsumer.h
-@@ -21,6 +21,7 @@
- #include <list>
- #include <set>
- #include <sstream>
-+#include <vector>
+-    return symbols->FindByName(name);
++    // 包名非空：先正常查找
++    const SymbolTable::Symbol* symbol = symbols->FindByName(name);
++    if (symbol) {
++      return symbol;
++    }
++    // 当包名等于编译包名但找不到时，回退搜索所有 -I include 包（包括 0x7F）中的资源
++    if (symbols->GetSearchAllIncludePackages() &&
++        name.package == context->GetCompilationPackage()) {
++      const auto& pkg_names = symbols->GetIncludePackageNames();
++      for (const std::string& pkg : pkg_names) {
++        if (pkg == name.package) continue;
++        symbol = symbols->FindByNameNoMangle(ResourceName(pkg, name.type, name.entry));
++        if (symbol && symbol->id) {
++          // 记录 0x7F fallback 资源，用于生成 R 类字段
++          if (symbol->id.value().package_id() == kAppPackageId) {
++            symbols->RecordFallbackResolvedEntry(
++                ResourceName(name.package, name.type, name.entry),
++                symbol->id.value());
++          }
++          return symbol;
++        }
++      }
++    }
++    return nullptr;
+   } else if (reference.id) {
+     return symbols->FindById(reference.id.value());
+   } else {
+@@ -299,8 +341,11 @@ const SymbolTable::Symbol* ReferenceLinker::ResolveSymbolCheckVisibility(const R
+   }
  
- #include "NameMangler.h"
- #include "Resource.h"
-diff --git a/submodules/base/tools/aapt2/process/SymbolTable.cpp b/submodules/base/tools/aapt2/process/SymbolTable.cpp
-index d78baf9ffeb4..8421b85ef152 100644
---- a/submodules/base/tools/aapt2/process/SymbolTable.cpp
-+++ b/submodules/base/tools/aapt2/process/SymbolTable.cpp
-@@ -119,6 +119,27 @@ const SymbolTable::Symbol* SymbolTable::FindByName(const ResourceName& name) {
+   if (!IsSymbolVisible(*symbol, reference, callsite)) {
+-    if (out_error) *out_error = "is private";
+-    return nullptr;
++    // 通过 --disable-visibility-check 标志控制（默认 true，允许引用非 PUBLIC 资源）
++    if (!symbols->GetDisableVisibilityCheck()) {
++      if (out_error) *out_error = "is private";
++      return nullptr;
++    }
+   }
+   return symbol;
+ }
+diff --git a/tools/aapt2/process/SymbolTable.cpp b/tools/aapt2/process/SymbolTable.cpp
+index d78baf9ffeb4..67e976f7f228 100644
+--- a/tools/aapt2/process/SymbolTable.cpp
++++ b/tools/aapt2/process/SymbolTable.cpp
+@@ -17,6 +17,7 @@
+ #include "process/SymbolTable.h"
+ 
+ #include <iostream>
++#include <set>
+ 
+ #include "android-base/logging.h"
+ #include "android-base/stringprintf.h"
+@@ -119,6 +120,27 @@ const SymbolTable::Symbol* SymbolTable::FindByName(const ResourceName& name) {
    return shared_symbol.get();
  }
  
@@ -150,10 +445,79 @@ index d78baf9ffeb4..8421b85ef152 100644
  const SymbolTable::Symbol* SymbolTable::FindById(const ResourceId& id) {
    if (const std::shared_ptr<Symbol>& s = id_cache_.get(id)) {
      return s.get();
-diff --git a/submodules/base/tools/aapt2/process/SymbolTable.h b/submodules/base/tools/aapt2/process/SymbolTable.h
-index 36eb0bab6046..06f1b620bff0 100644
---- a/submodules/base/tools/aapt2/process/SymbolTable.h
-+++ b/submodules/base/tools/aapt2/process/SymbolTable.h
+@@ -213,6 +235,11 @@ std::unique_ptr<SymbolTable::Symbol> ResourceTableSymbolSource::FindByName(
+       } else {
+         return {};
+       }
++    } else if (sr.entry->values.empty()) {
++      // 预填充的空 attr 条目（只有 pinned ID，无 Attribute 值）：
++      // 返回 nullptr 让 SymbolTable 回退到 AssetManagerSymbolSource 提供完整 Attribute 信息。
++      // entry 的 pinned ID 仍由 IdAssigner 在 ResourceTable 层面正确处理。
++      return {};
+     }
+   }
+   return symbol;
+@@ -239,6 +266,20 @@ std::map<size_t, std::string> AssetManagerSymbolSource::GetAssignedPackageIds()
+   return package_map;
+ }
+ 
++std::vector<std::string> AssetManagerSymbolSource::GetAllPackageNames() const {
++  // 收集所有 include 包的包名（包括 0x7F），用于 fallback 搜索。
++  // bundle 的 0x7F 资源会在 host 编译时被引用，后续由 RemapHostResourceIdsTask 重映射 ID
++  std::vector<std::string> names;
++  std::set<std::string> seen;
++  asset_manager_.ForEachPackage([&names, &seen](const std::string& name, uint8_t id) -> bool {
++    if (seen.insert(name).second) {
++      names.push_back(name);
++    }
++    return true;
++  });
++  return names;
++}
++
+ bool AssetManagerSymbolSource::IsPackageDynamic(uint32_t packageId,
+     const std::string& package_name) const {
+   if (packageId == 0) {
+@@ -435,4 +476,35 @@ std::unique_ptr<SymbolTable::Symbol> AssetManagerSymbolSource::FindByReference(
+   return {};
+ }
+ 
++std::vector<std::pair<ResourceName, ResourceId>>
++AssetManagerSymbolSource::GetAll7fResources() const {
++  // 遍历所有 -I 加载的 include 包，收集 package_id == 0x7F 的全部资源
++  // 这些资源需要预填充到 host ResourceTable，让 IdAssigner 分配 host 体系 ID
++  constexpr uint8_t kAppPackageId = 0x7F;
++  std::vector<std::pair<ResourceName, ResourceId>> result;
++
++  for (const auto& assets : apk_assets_) {
++    for (const auto& loaded_package : assets->GetLoadedArsc()->GetPackages()) {
++      if (loaded_package->GetPackageId() != kAppPackageId) {
++        continue;
++      }
++      // 遍历该 0x7F 包的所有资源 ID
++      for (auto it = loaded_package->begin(); it != loaded_package->end(); ++it) {
++        uint32_t resid = *it;
++        if (resid == 0) continue;
++
++        // 通过 AssetManager2 获取资源名称
++        auto name = asset_manager_.GetResourceName(resid);
++        if (!name.has_value()) continue;
++
++        std::optional<ResourceName> parsed_name = ResourceUtils::ToResourceName(*name);
++        if (!parsed_name) continue;
++
++        result.emplace_back(std::move(*parsed_name), ResourceId(resid));
++      }
++    }
++  }
++  return result;
++}
++
+ }  // namespace aapt
+diff --git a/tools/aapt2/process/SymbolTable.h b/tools/aapt2/process/SymbolTable.h
+index 36eb0bab6046..3b70a40dc8f5 100644
+--- a/tools/aapt2/process/SymbolTable.h
++++ b/tools/aapt2/process/SymbolTable.h
 @@ -90,6 +90,9 @@ class SymbolTable {
    // results are stored in a cache which may evict entries on subsequent calls.
    const Symbol* FindByName(const ResourceName& name);
@@ -164,7 +528,7 @@ index 36eb0bab6046..06f1b620bff0 100644
    // NOTE: Never hold on to the result between calls to FindByXXX. The
    // results are stored in a cache which may evict entries on subsequent calls.
    const Symbol* FindById(const ResourceId& id);
-@@ -100,6 +103,24 @@ class SymbolTable {
+@@ -100,6 +103,42 @@ class SymbolTable {
    // results are stored in a cache which may evict entries on subsequent calls.
    const Symbol* FindByReference(const Reference& ref);
  
@@ -186,10 +550,28 @@ index 36eb0bab6046..06f1b620bff0 100644
 +    return include_package_names_;
 +  }
 +
++  // 设置是否禁用资源可见性检查（默认 true，允许引用非 PUBLIC 资源）
++  void SetDisableVisibilityCheck(bool val) {
++    disable_visibility_check_ = val;
++  }
++
++  bool GetDisableVisibilityCheck() const {
++    return disable_visibility_check_;
++  }
++
++  // 记录通过 fallback 解析到的 0x7F 资源（用于后续添加到 ResourceTable 生成 R 类字段）
++  void RecordFallbackResolvedEntry(const ResourceName& name, ResourceId id) {
++    fallback_resolved_entries_.emplace_back(name, id);
++  }
++
++  const std::vector<std::pair<ResourceName, ResourceId>>& GetFallbackResolvedEntries() const {
++    return fallback_resolved_entries_;
++  }
++
   private:
    NameMangler* mangler_;
    std::unique_ptr<ISymbolTableDelegate> delegate_;
-@@ -110,6 +131,10 @@ class SymbolTable {
+@@ -110,6 +149,16 @@ class SymbolTable {
    android::LruCache<ResourceName, std::shared_ptr<Symbol>> cache_;
    android::LruCache<ResourceId, std::shared_ptr<Symbol>> id_cache_;
  
@@ -197,9 +579,32 @@ index 36eb0bab6046..06f1b620bff0 100644
 +  bool search_all_include_packages_ = false;
 +  std::vector<std::string> include_package_names_;
 +
++  // 禁用资源可见性检查（默认 true，允许引用 -I 包中的非 PUBLIC 资源）
++  bool disable_visibility_check_ = true;
++
++  // fallback 解析到的 0x7F 资源列表
++  std::vector<std::pair<ResourceName, ResourceId>> fallback_resolved_entries_;
++
    DISALLOW_COPY_AND_ASSIGN(SymbolTable);
  };
  
--- 
-2.33.0
-
+@@ -194,6 +243,8 @@ class AssetManagerSymbolSource : public ISymbolSource {
+ 
+   bool AddAssetPath(android::StringPiece path);
+   std::map<size_t, std::string> GetAssignedPackageIds() const;
++  // 获取所有 include 包中不同的包名（包括同一 PackageGroup 中的不同名字）
++  std::vector<std::string> GetAllPackageNames() const;
+   bool IsPackageDynamic(uint32_t packageId, const std::string& package_name) const;
+ 
+   std::unique_ptr<SymbolTable::Symbol> FindByName(
+@@ -202,6 +253,10 @@ class AssetManagerSymbolSource : public ISymbolSource {
+   std::unique_ptr<SymbolTable::Symbol> FindByReference(
+       const Reference& ref) override;
+ 
++  // 获取所有 0x7F include 包中的资源列表（name + 原始 ID）
++  // 用于在 link 阶段预填充到 host ResourceTable，使 IdAssigner 分配 host 体系 ID
++  std::vector<std::pair<ResourceName, ResourceId>> GetAll7fResources() const;
++
+   android::AssetManager2* GetAssetManager() {
+     return &asset_manager_;
+   }
