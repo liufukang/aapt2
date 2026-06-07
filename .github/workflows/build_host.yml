@@ -125,6 +125,11 @@ jobs:
           fi
           ./build_host.sh ${{ matrix.build_args }}
 
+      # ---- macOS ad-hoc 签名（满足 Apple Silicon 内核强制签名要求）----
+      - name: Ad-hoc codesign (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --sign - build/bin/aapt2
+
       # ---- 验证 ----
       - name: Verify
         run: |
