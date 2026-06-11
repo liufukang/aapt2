@@ -6,26 +6,8 @@ cp "misc/IncrementalProperties.sysprop.cpp" "submodules/incremental_delivery/sys
 
 cp "misc/platform_tools_version.h" "submodules/soong/cc/libbuildversion/include"
 
-# As our sources are in submodules and not in frameworks/base/tools/aapt2 we need to change the inclusions
-configPattern="s#frameworks/base/tools/aapt2/Configuration.proto#Configuration.proto#g"
-ressourcesPattern="s#frameworks/base/tools/aapt2/Resources.proto#Resources.proto#g"
-
-sed -i "$configPattern" "submodules/base/tools/aapt2/Resources.proto"
-sed -i "$configPattern" "submodules/base/tools/aapt2/ResourcesInternal.proto"
-
-sed -i "$ressourcesPattern" "submodules/base/tools/aapt2/ApkInfo.proto"
-sed -i "$ressourcesPattern" "submodules/base/tools/aapt2/ResourcesInternal.proto"
-
-
-# Apply modification made by IBotPeaches for apktool
-git apply "patches/apktool_ibotpeaches.patch"
+# protobuf CMake 兼容性修复
 git apply "patches/protobuf.patch"
-
-# Add --search-all-include-packages flag for cross-bundle resource references
-git apply "patches/search_all_include_packages.patch"
-
-# Fix BusError when executing a 32b binary on a armv8 with compatibility mode
-git apply "patches/32bsystem_on_armv8.patch"
 
 # Fix map_ptr const_iterator missing operator-- for libstdc++
 git -C "submodules/incremental_delivery" apply "../../patches/map_ptr_iterator.patch"

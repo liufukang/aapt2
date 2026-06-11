@@ -45,7 +45,8 @@
 [submodule "submodules/base"]
 	shallow = true
 	path = submodules/base
-	url = https://android.googlesource.com/platform/frameworks/base
+	url = https://github.com/liufukang/android_frameworks_base.git
+	branch = aapt-base-patch
 [submodule "submodules/libziparchive"]
 	shallow = true
 	path = submodules/libziparchive
