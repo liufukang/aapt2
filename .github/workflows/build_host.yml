@@ -142,3 +142,32 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: build/bin/aapt2*
+
+  # 将三个平台的产物打包为 aapt2.zip
+  package:
+    name: Package aapt2.zip
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create aapt2.zip
+        run: |
+          mkdir -p package
+          # macOS 产物命名为 aapt2
+          cp artifacts/aapt2-darwin/aapt2 package/aapt2
+          # Windows 产物命名为 aapt2.exe
+          cp artifacts/aapt2-windows-x86_64/aapt2.exe package/aapt2.exe
+          # Linux 产物命名为 aapt2_
+          cp artifacts/aapt2-linux-x86_64/aapt2 package/aapt2_
+          cd package
+          zip ../aapt2.zip aapt2 aapt2.exe aapt2_
+
+      - name: Upload aapt2.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: aapt2
+          path: aapt2.zip
