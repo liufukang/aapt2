@@ -417,6 +417,12 @@ target_compile_options(libaapt2 PRIVATE ${COMPILE_FLAGS})
 
 # ========================= aapt2 可执行文件 ============================
 set(TOOL_SOURCE
+    ${SRC}/base/tools/aapt2/aura/ArscPackageNameRewriter.cpp
+    ${SRC}/base/tools/aapt2/aura/LegacyPackageCollector.cpp
+    ${SRC}/base/tools/aapt2/aura/PhantomEntrySynthesizer.cpp
+    ${SRC}/base/tools/aapt2/aura/PublicAarReader.cpp
+    ${SRC}/base/tools/aapt2/aura/PublicRtxtMerger.cpp
+    ${SRC}/base/tools/aapt2/aura/ShadowResourceMarker.cpp
     ${SRC}/base/tools/aapt2/cmd/ApkInfo.cpp
     ${SRC}/base/tools/aapt2/cmd/Command.cpp
     ${SRC}/base/tools/aapt2/cmd/Compile.cpp
