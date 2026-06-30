@@ -69,9 +69,11 @@ add_subdirectory(submodules/expat/expat EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
 
-# Windows 强制使用静态库（避免链接 .dll.a）
+# Windows / Linux 静态链接时强制使用静态库
 if(WIN32)
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".lib")
+elseif(NOT APPLE)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif()
 
 find_package(ZLIB REQUIRED)
