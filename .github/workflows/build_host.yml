@@ -94,7 +94,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build zlib1g-dev clang
+          sudo apt-get install -y cmake ninja-build zlib1g-dev clang libstdc++-12-dev
 
       - name: Install build tools (macOS)
         if: runner.os == 'macOS'
